@@ -1,0 +1,33 @@
+when:
+  - event: [manual, push]
+    branch: [main]
+
+variables:
+  images:
+    - &image_set_env bash:5.2.37
+    - &image_kaniko_build gitea.vspdev.io/wci-plugins/kaniko:1.1.1
+  global_env: &global_env
+    VERSION: 1.2.0
+    ENV_FILE: envFile
+
+steps:
+  - name: set_dynamic_vars
+    image: *image_set_env
+    environment:
+      <<: *global_env
+    commands:
+      - echo "IMAGE_TAG=latest" >> $ENV_FILE
+      - echo "IMAGE_TAG_1=$VERSION" >> $ENV_FILE
+      - cat $ENV_FILE
+  - name: kaniko_build
+    image: *image_kaniko_build
+    backend_options:
+      kubernetes:
+        secrets:
+          - name: gitea-registry
+    settings:
+      env-file: envFile
+      repo-url: gitea.vspdev.io
+      image-name: vsp-dev/acme-nginx
+      dockerfile: Dockerfile
+      extra-args: ""
