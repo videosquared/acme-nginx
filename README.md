@@ -5,7 +5,7 @@
 `ACME_EMAIL`: Email used for lets encrypt account (REQUIRED).  
 `CF_Token`: Token for Cloudflare API access (REQUIRED).  
 `CF_Account_ID`: Cloudflare account ID (REQUIRED).  
-`ACME_RENEWAL_DAY`: Days before triggering renewal (Default: 70)
+`ACME_RENEWAL_DAY`: Days before triggering renewal (Default: 70)  
 `ACME_CERT_1`: CSV format for list of SANs for this certificate (REQUIRED).  
 `ACME_CERT_n:`: CSV format for list of SANs for this certificate (Optional).
 
