@@ -21,6 +21,7 @@ steps:
       - cat $ENV_FILE
   - name: plugin_buildkit
     image: *image_plugin_buildkit
+    privileged: true
     backend_options:
       kubernetes:
         secrets:
