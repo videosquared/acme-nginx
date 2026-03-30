@@ -7,7 +7,7 @@ variables:
     - &image_set_env bash:5.2.37
     - &image_plugin_buildkit gitea.vspdev.io/wci-plugins/buildkit:1.2.0
   global_env: &global_env
-    VERSION: &VERSION 1.2.1
+    VERSION: &VERSION 1.2.2
     ENV_FILE: &ENV_FILE envFile
 
 steps:
