@@ -1,0 +1,31 @@
+name: Build image
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+  packages: write
+env:
+  VERSION: 2.0.0
+jobs:
+  build:
+    name: Build image
+    runs-on: docker
+    container:
+      image: gitea.vspdev.io/nulbyte/actions-runner:1.0.3
+      credentials:
+        username: ${{ secrets.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Build and push image
+        uses: nulbyte/actions/build-image@main
+        with:
+          image_name: acme-nginx
+          image_repo: gitea.vspdev.io/nulbyte
+          image_tag: ${{ env.VERSION }}
+          image_tag_latest: "true"
+          registry_token: ${{ secrets.REGISTRY_TOKEN }}
+          registry_user: ${{ secrets.REGISTRY_USER }}

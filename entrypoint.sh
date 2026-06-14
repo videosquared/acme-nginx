@@ -1,108 +1,138 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+ACME_SERVER="${ACME_SERVER:-letsencrypt}"
+CRONTAB_FILE="${LE_CONFIG_HOME}/crontab"
+ACME_AUTO_CERT_ENABLED="${ACME_AUTO_CERT_ENABLED:-true}"
+ACME_RENEWAL_DAY="${ACME_RENEWAL_DAY:-70}"
 
 main() {
-    ACME_HOME="/opt/acme" # MUST NOT have trailing slash
-    ACME_CERT_DIR="/etc/ssl/acme" # MUST NOT have trailing slash
-    ACME_SERVER="${ACME_SERVER:-letsencrypt}"
-    ACME_SLEEP="${ACME_SLEEP:-86400}" # Sleep in seconds 1 day = 86400s
+    if [ "${ACME_AUTO_CERT_ENABLED}" = "true" ]; then
+        run_automated_certs
+    else
+        log "ACME_AUTO_CERT_ENABLED is false - skipping generating certs automatically."
+    fi
 
-    ACME_RENEWAL_DAY="${ACME_RENEWAL_DAY:-70}"
+    log "Validating nginx config"
+    # Hard failure
+    nginx -t
 
+    # Soft failure
+    # if ! nginx -t; then
+    #     log "WARNING: nginx config validation failed — attempting to start anyway."
+    # fi
+
+    log "Starting nginx (foreground)"
+    exec nginx -g "daemon off;"
+}
+
+run_automated_certs() {
     check_env_vars_exist
 
-    DEFAULT_ARGS="--home ${ACME_HOME} --server ${ACME_SERVER}"
-
     log "Trying to register account."
-    ${ACME_HOME}/acme.sh --register-account ${DEFAULT_ARGS} -m ${ACME_EMAIL}
+    acme.sh --register-account --server ${ACME_SERVER} -m ${ACME_EMAIL}
 
-    i=1
-    while true; do 
-        var_name="ACME_CERT_${i}"
-        value="${!var_name:-}"
+    local i=1
+    while true; do
+        local var_name="ACME_CERT_${i}"
+        local value="${!var_name:-}"
 
         log "Checking ${var_name}."
 
-        if [ -z $value ]; then
+        if [ -z "${value}" ]; then
             log "ACME_CERT_${i} empty. Not checking any more."
             break
         fi
 
-        if [ $value == *,* ]; then
-            log "Found multi SAN certificate."
+        log "Processing ${var_name}: '${value}'"
+
+        if [[ "${value}" == *,* ]]; then
+            log "Found multi-SAN certificate."
             multi_san_cert $value
-            continue
-        else 
-            log "Found single SAN certificate."
+        else
+            log "Found single-SAN certificate."
             single_san_cert $value
         fi
 
         ((i++))
     done
 
-    log "Starting nginx"
-    nginx 
+    log "Restricting permissions on ACME data directories."
+    chmod 700 "${LE_CONFIG_HOME}" "${CERT_HOME}" 2>/dev/null || true
 
-    log "Certificate generation done, going to start the cron job now."
+    setup_crontab
 
-    while true; do
-        ${ACME_HOME}/acme.sh --cron --home ${ACME_HOME}
-        log "Sleeping for ${ACME_SLEEP} seconds."
-        sleep ${ACME_SLEEP}
-    done
+    log "Starting supercronic in background."
+    supercronic "${CRONTAB_FILE}" &
 }
 
 check_env_vars_exist() {
-
-    if [ -z "${ACME_EMAIL}" ]; then
-        log "Env var: ACME_EMAIL must be set."
-        exit 1
-    fi
-
-    if [ -z "${CF_Token}" ]; then
-        log "Env var: CF_Token must be set."
-        exit 1
-    fi
-
-    if [ -z "${CF_Account_ID}" ]; then
-        log "Env var: CF_Account_ID must be set."
-        exit 1
-    fi
-
-    if [ -z "${ACME_CERT_1}" ]; then
-        log "Atleast one certificate must be configured via the ACME_CERT_1 environment variable"
-        exit 1
-    fi
+    local missing=0
+    for var in ACME_EMAIL CF_Token CF_Account_ID ACME_CERT_1; do
+        if [ -z "${!var:-}" ]; then
+            log "Required env var '${var}' is not set (required when ACME_AUTO_CERT_ENABLED=true)."
+            missing=1
+        fi
+    done
+    [ $missing -eq 1 ] && exit 1
 }
 
 single_san_cert() {
     local domain=$1
 
-    if [ ! -d "${ACME_CERT_DIR}/${domain}_ecc" ] && [ ! -d "${ACME_CERT_DIR}/${domain}" ]; then
+    if [ ! -d "${CERT_HOME}/${domain}_ecc" ] && [ ! -d "${CERT_HOME}/${domain}" ]; then
         log "Cert for ${domain} does not exist yet, issuing certificate."
-        ${ACME_HOME}/acme.sh --issue ${DEFAULT_ARGS} -d ${domain} --days ${ACME_RENEWAL_DAY} --dns dns_cf --renew-hook "nginx -s reload"
+        acme.sh --issue \
+            --server "${ACME_SERVER}" \
+            -d ${domain} \
+            --days ${ACME_RENEWAL_DAY} \
+            --dns dns_cf \
+            --renew-hook "nginx -s reload"
+    else
+        log "Certificate for '${domain}' already exists — skipping."
     fi
 }
 
 multi_san_cert() {
-    local domains=$1
+    local domains_csv="$1"
     local domain_args=""
 
-    IFS=',' read -a array <<< "$domains"
+    IFS=',' read -ra san_array <<< "${domains_csv}"
+    local primary="${san_array[0]}"
 
-    log "Generating multi-san certificate"
-    if [ ! -d "${ACME_CERT_DIR}/${domains[0]}_ecc" ] && [ ! -d "${ACME_CERT_DIR}/${domain[0]}" ]; then
-        for san in "${domains[@]}"
-        do 
+    if [ ! -d "${CERT_HOME}/${primary}_ecc" ] && [ ! -d "${CERT_HOME}/${primary}" ]; then
+        log "Multi-SAN certificate for '${primary}' not found — issuing."
+        for san in "${san_array[@]}"; do
             domain_args="${domain_args}-d ${san} "
         done
 
-        ${ACME_HOME}/acme.sh --issue ${DEFAULT_ARGS} ${domain_args} --days ${ACME_RENEWAL_DAY} --dns dns_cf --renew-hook "nginx -s reload"
-    fi 
+        acme.sh --issue \
+            --server "${ACME_SERVER}" \
+            ${domain_args} \
+            --days "${ACME_RENEWAL_DAY}" \
+            --dns dns_cf \
+            --renew-hook "nginx -s reload"
+    else
+        log "Multi-SAN certificate for '${primary}' already exists — skipping."
+    fi
+}
+
+setup_crontab() {
+    if [ ! -f "${CRONTAB_FILE}" ]; then
+        log "No crontab found — generating one."
+        local timestamp
+        timestamp=$(date -u "+%s")
+        local random_minute=$(( timestamp % 60 ))
+        local random_hour=$(( timestamp / 60 % 24 ))
+        echo "${random_minute} ${random_hour} * * * acme.sh --cron" > "${CRONTAB_FILE}"
+        log "Renewal scheduled daily at $(printf '%02d:%02d' $random_hour $random_minute) UTC."
+    else
+        log "Existing crontab found — using it."
+    fi
 }
 
 log() {
     local message=$1
-
     echo "[$(date)] MY_ACME_LOG: ${message}"
 }
 

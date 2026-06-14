@@ -1,0 +1,27 @@
+name: Renovate
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 9 * * *"
+      timezone: "Europe/London"
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  renovate:
+    name: Renovate run
+    runs-on: docker
+    container:
+      image: gitea.vspdev.io/nulbyte/actions-runner:1.0.3
+      credentials:
+        username: ${{ secrets.REGISTRY_USER }}
+        password: ${{ secrets.REGISTRY_TOKEN }}
+    steps:
+      - name: Run renovate bot
+        uses: nulbyte/actions/renovatebot@main
+        with:
+          renovate_token: ${{ secrets.RENOVATE_TOKEN }}
+          registry_user: ${{ secrets.REGISTRY_USER }}
+          registry_token: ${{ secrets.REGISTRY_TOKEN }}
+          gh_renovate_ro: ${{ secrets.GH_RENOVATE_RO }}
