@@ -136,7 +136,7 @@ setup_crontab() {
 # log to stdout
 log() {
     local message=$1
-    echo "[$(date)] MY_ACME_LOG: ${message}"
+    echo "[$(date)] ENTRYPOINT: ${message}"
 }
 
 main
