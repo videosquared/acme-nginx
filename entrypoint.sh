@@ -63,7 +63,7 @@ run_automated_certs() {
     setup_crontab
 
     log "Starting supercronic in background."
-    supercronic "${CRONTAB_FILE}" &
+    supercronic -passthrough-logs "${CRONTAB_FILE}" &
 }
 
 check_env_vars_exist() {
