@@ -24,3 +24,7 @@
 ## Notes
 - If `ACME_AUTO_CERT_ENABLED=false`, you must generate your own certificates by exec'ing into the container and running the commands yourself (or supply your own) and ensure `/etc/nginx/conf.d` references valid certificate paths before the container starts — `nginx -t` runs on startup and the container will fail to start if the config is invalid or referenced cert files are missing.
 - `/opt/acme-sh` and `/opt/certs` should both be treated as sensitive: `/opt/certs/<domain>/<domain>.conf` contains the saved Cloudflare API credentials for that domain alongside its certificate files.
+
+## Logging
+Nginx access and error logs are sent to stdout/stderr (`docker logs`).  
+**DO NOT** put log locations in your own custom code.
