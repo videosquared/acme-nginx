@@ -28,3 +28,82 @@
 ## Logging
 Nginx access and error logs are sent to stdout/stderr (`docker logs`).  
 **DO NOT** put log locations in your own custom code.
+
+## Manual certificate management (ACME_AUTO_CERT_ENABLED=false)
+
+When `ACME_AUTO_CERT_ENABLED=false`, the container starts nginx and a 
+renewal daemon (cron) only — it does not issue any certificates itself. 
+You issue certs manually via `docker compose exec`, which inherits the 
+container's environment (CF_Token, CF_Account_ID, etc.) automatically.
+
+### First-time setup
+
+1. Create empty placeholder config files so `nginx -t` passes on first boot:
+```bash
+   mkdir -p /opt/acme-nginx/nginx/conf
+   touch /opt/acme-nginx/nginx/conf/http.conf
+   touch /opt/acme-nginx/nginx/conf/stream.conf
+```
+
+2. Start the container:
+```bash
+   docker compose up -d
+```
+
+3. Issue a certificate (single domain):
+```bash
+   docker compose exec acme-nginx acme.sh --issue \
+     -d example.com \
+     --dns dns_cf \
+     --renew-hook "nginx -s reload"
+```
+
+   Multi-SAN:
+```bash
+   docker compose exec acme-nginx acme.sh --issue \
+     -d example.com -d www.example.com \
+     --dns dns_cf \
+     --renew-hook "nginx -s reload"
+```
+
+   Certs are written to `/opt/certs/<domain>_ecc/` (persisted volume).
+   The account is auto-registered on first `--issue` if none exists.
+
+4. Write your server block(s) in `/opt/acme-nginx/nginx/conf/http.conf`, 
+   referencing the issued cert paths, e.g.:
+```nginx
+   server {
+       listen 443 ssl;
+       server_name example.com;
+
+       ssl_certificate     /opt/certs/example.com_ecc/fullchain.cer;
+       ssl_certificate_key /opt/certs/example.com_ecc/example.com.key;
+
+       location / {
+           proxy_pass http://your-upstream;
+       }
+   }
+```
+
+5. Reload nginx to pick up the new config:
+```bash
+   docker compose exec acme-nginx nginx -s reload
+```
+
+### Other useful commands
+
+List all managed certificates:
+```bash
+docker compose exec acme-nginx acme.sh --list
+```
+
+Manually trigger a renewal check (normally handled by the cron daemon):
+```bash
+docker compose exec acme-nginx acme.sh --cron
+```
+
+Revoke and remove a certificate:
+```bash
+docker compose exec acme-nginx acme.sh --revoke -d example.com
+docker compose exec acme-nginx acme.sh --remove -d example.com
+```
