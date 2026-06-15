@@ -11,6 +11,9 @@ main() {
         run_automated_certs
     else
         log "ACME_AUTO_CERT_ENABLED is false - skipping generating certs automatically."
+        log "Running renewal daemon only."
+
+        run_renewal_cron
     fi
 
     log "Validating nginx config"
@@ -60,6 +63,11 @@ run_automated_certs() {
     log "Restricting permissions on ACME data directories."
     chmod 700 "${LE_CONFIG_HOME}" "${CERT_HOME}" 2>/dev/null || true
 
+    run_renewal_cron
+}
+
+run_renewal_cron() {
+    mkdir -p "${LE_CONFIG_HOME}"
     setup_crontab
 
     log "Starting supercronic in background."
