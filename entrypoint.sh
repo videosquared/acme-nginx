@@ -74,7 +74,9 @@ check_env_vars_exist() {
             missing=1
         fi
     done
-    [ $missing -eq 1 ] && exit 1
+    if [ "${missing}" -eq 1 ]; then
+        exit 1
+    fi
 }
 
 single_san_cert() {
