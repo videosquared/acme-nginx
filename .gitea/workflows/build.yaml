@@ -3,17 +3,14 @@ on:
   push:
     branches:
       - main
-permissions:
-  contents: read
-  packages: write
 env:
-  VERSION: 2.1.0
+  VERSION: 2.1.1
 jobs:
   build:
     name: Build image
     runs-on: docker
     container:
-      image: gitea.vspdev.io/nulbyte/actions-runner:1.0.3
+      image: cr.nulbit.io/nulbyte/actions-runner:1.0.4
       credentials:
         username: ${{ secrets.REGISTRY_USER }}
         password: ${{ secrets.REGISTRY_TOKEN }}
@@ -24,7 +21,7 @@ jobs:
         uses: nulbyte/actions/build-image@main
         with:
           image_name: acme-nginx
-          image_repo: gitea.vspdev.io/nulbyte
+          image_repo: cr.nulbit.io/nulbyte
           image_tag: ${{ env.VERSION }}
           image_tag_latest: "true"
           registry_token: ${{ secrets.REGISTRY_TOKEN }}
