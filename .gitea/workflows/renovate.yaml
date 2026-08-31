@@ -15,7 +15,7 @@ jobs:
     name: Renovate run
     runs-on: docker
     container:
-      image: cr.nulbit.io/nulbyte/actions-runner:1.0.4
+      image: cr.nulbit.io/nulbyte/actions-runner:1.0.5
       credentials:
         username: ${{ secrets.REGISTRY_USER }}
         password: ${{ secrets.REGISTRY_TOKEN }}
